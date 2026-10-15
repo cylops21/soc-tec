@@ -1,18 +1,80 @@
 | rest /services/server/info splunk_server=*
 | eval v=split(version,"."),
-       maj=tonumber(mvindex(v,0)),
-       min=tonumber(mvindex(v,1)),
-       pat=tonumber(coalesce(mvindex(v,2),"0"))
-| eval status=case(
-    maj=9  AND min=4 AND pat>=15, "Patched",
-    maj=9  AND min=4,             "VULNERABLE",
-    maj=10 AND min=0 AND pat>=10, "Patched",
-    maj=10 AND min=0,             "VULNERABLE",
-    maj=10 AND min=2 AND pat>=7,  "Patched",
-    maj=10 AND min=2,             "VULNERABLE",
-    maj=10 AND min=4 AND pat>=3,  "Patched",
-    maj=10 AND min=4,             "VULNERABLE",
-    true(),                       "Check manually")
-| eval "CVE-2026-76269"=status, "CVE-2026-76275"=status
-| table splunk_server server_roles version "CVE-2026-76269" "CVE-2026-76275"
-| sort "CVE-2026-76269" desc
+       maj=tonumber(mvindex(v,0)), min=tonumber(mvindex(v,1)),
+       pat=tonumber(coalesce(mvindex(v,2),"0")),
+       branch=maj.".".min
+``` fix patch level per branch; -1 = branch not affected ```
+| eval fixStd=case(branch="9.4",15, branch="10.0",10, branch="10.2",7, branch="10.4",3),
+       fix264=case(branch="9.4",15, branch="10.0",10, branch="10.2",6, branch="10.4",2),
+       fixNo94=case(branch="9.4",-1, branch="10.0",10, branch="10.2",7, branch="10.4",3),
+       fix268=case(branch="9.4",-1, branch="10.0",-1, branch="10.2",7, branch="10.4",3),
+       fix270=case(branch="9.4",-1, branch="10.0",-1, branch="10.2",-1, branch="10.4",3)
+| eval sStd=case(isnull(fixStd),"Check manually", fixStd<0,"Not affected", pat>=fixStd,"Patched", true(),"VULNERABLE"),
+       s264=case(isnull(fix264),"Check manually", fix264<0,"Not affected", pat>=fix264,"Patched", true(),"VULNERABLE"),
+       sNo94=case(isnull(fixNo94),"Check manually", fixNo94<0,"Not affected", pat>=fixNo94,"Patched", true(),"VULNERABLE"),
+       s268=case(isnull(fix268),"Check manually", fix268<0,"Not affected", pat>=fix268,"Patched", true(),"VULNERABLE"),
+       s270=case(isnull(fix270),"Check manually", fix270<0,"Not affected", pat>=fix270,"Patched", true(),"VULNERABLE"),
+       s266=if(os_name!="Linux","Not affected (non-Linux)",sStd)
+| eval results=mvappend(
+    "CVE-2026-76264|Scripted lookup authz (also needs limits.conf)|".s264,
+    "CVE-2026-76265|Secure Gateway REST access control (also check SSG app)|".sStd,
+    "CVE-2026-76266|Linux package upgrade privesc|".s266,
+    "CVE-2026-76267|O11y Cloud app log injection|".sNo94,
+    "CVE-2026-76268|Patroni REST API unauth RCE (9.8)|".s268,
+    "CVE-2026-76269|Search job retrieval IDOR|".sStd,
+    "CVE-2026-76270|SPL2 module catalog SQLi|".s270,
+    "CVE-2026-76271|Discover O11y app ReDoS|".sNo94,
+    "CVE-2026-76272|Secure Gateway signing authz (also check SSG app)|".sStd,
+    "CVE-2026-76273|collect command system messages|".sStd,
+    "CVE-2026-76274|O11y Cloud app SSRF|".sNo94,
+    "CVE-2026-76275|Search job listing authz|".sStd,
+    "CVE-2026-76276|Discover O11y app source maps|".sNo94,
+    "CVE-2026-76277|Username trailing period|".sStd,
+    "CVE-2026-76278|SPL2 module permissions bypass|".sNo94,
+    "CVE-2026-76279|collect command index names|".sStd,
+    "CVE-2026-76280|Secure Gateway KV Store perms (also check SSG app)|".sStd)
+| mvexpand results
+| eval r=split(results,"|"), cve=mvindex(r,0), issue=mvindex(r,1), status=mvindex(r,2)
+| table splunk_server version os_name cve issue status
+| sort splunk_server cve
+```
+
+To see only problems, add `| search status="VULNERABLE" OR status="Check manually"` at the end. For a grid with one row per node and one column per CVE, replace the last two lines with `| xyseries splunk_server cve status`.
+
+On 9.4.15, you should see `Patched` for the 9.4-affected CVEs and `Not affected` for 76267, 76268, 76270, 76271, 76274, 76276 and 76278. Windows nodes show `Not affected (non-Linux)` for 76266.
+
+**Search 2: Secure Gateway app (CVE-2026-76265, 76272, 76280)**
+
+These three are also fixed in the Secure Gateway app, so check the app version as well as the Splunk version.
+
+```spl
+| rest /services/apps/local splunk_server=*
+| search title="splunk_secure_gateway"
+| eval v=split(version,"."), maj=tonumber(mvindex(v,0)), min=tonumber(mvindex(v,1)), pat=tonumber(mvindex(v,2))
+| eval ssg_status=case(
+    in(tostring(disabled),"1","true"),        "Disabled (mitigated)",
+    maj=3 AND min=10 AND pat>=11,             "Patched",
+    maj=3 AND min=9  AND pat>=25,             "Patched",
+    maj=3 AND min=8  AND pat>=72,             "Patched",
+    maj>3 OR (maj=3 AND min>10),              "Patched",
+    true(),                                   "VULNERABLE")
+| table splunk_server title version disabled ssg_status
+```
+
+**Search 3: limits.conf setting (CVE-2026-76264)**
+
+This one needs a configuration change after upgrading.
+
+```spl
+| rest /servicesNS/nobody/system/configs/conf-limits/lookup splunk_server=*
+| eval cve_76264_config=if(scripted_lookup_raw_write_enforcement="block","Set correctly","MISSING - set to block")
+| table splunk_server scripted_lookup_raw_write_enforcement cve_76264_config
+```
+
+If a node returns no row or an empty value, confirm on that host with `splunk btool limits list lookup --debug`.
+
+**A few caveats:**
+
+- **SVD-2026-1002** (the internal hardening advisory) is fixed by the same versions. If Search 1 shows `Patched` for the standard group, those are covered too.
+- **CVE-2026-76266** only matters if you install or upgrade with RPM/DEB packages. Tarball installs aren't exposed through that path.
+- **Nodes the search head can't reach** won't appear in any of these results. Check standalone forwarders and similar hosts directly with `splunk version`.
