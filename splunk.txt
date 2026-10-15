@@ -1,80 +1,69 @@
-| rest /services/server/info splunk_server=*
-| eval v=split(version,"."),
-       maj=tonumber(mvindex(v,0)), min=tonumber(mvindex(v,1)),
-       pat=tonumber(coalesce(mvindex(v,2),"0")),
-       branch=maj.".".min
-``` fix patch level per branch; -1 = branch not affected ```
-| eval fixStd=case(branch="9.4",15, branch="10.0",10, branch="10.2",7, branch="10.4",3),
-       fix264=case(branch="9.4",15, branch="10.0",10, branch="10.2",6, branch="10.4",2),
-       fixNo94=case(branch="9.4",-1, branch="10.0",10, branch="10.2",7, branch="10.4",3),
-       fix268=case(branch="9.4",-1, branch="10.0",-1, branch="10.2",7, branch="10.4",3),
-       fix270=case(branch="9.4",-1, branch="10.0",-1, branch="10.2",-1, branch="10.4",3)
-| eval sStd=case(isnull(fixStd),"Check manually", fixStd<0,"Not affected", pat>=fixStd,"Patched", true(),"VULNERABLE"),
-       s264=case(isnull(fix264),"Check manually", fix264<0,"Not affected", pat>=fix264,"Patched", true(),"VULNERABLE"),
-       sNo94=case(isnull(fixNo94),"Check manually", fixNo94<0,"Not affected", pat>=fixNo94,"Patched", true(),"VULNERABLE"),
-       s268=case(isnull(fix268),"Check manually", fix268<0,"Not affected", pat>=fix268,"Patched", true(),"VULNERABLE"),
-       s270=case(isnull(fix270),"Check manually", fix270<0,"Not affected", pat>=fix270,"Patched", true(),"VULNERABLE"),
-       s266=if(os_name!="Linux","Not affected (non-Linux)",sStd)
-| eval results=mvappend(
-    "CVE-2026-76264|Scripted lookup authz (also needs limits.conf)|".s264,
-    "CVE-2026-76265|Secure Gateway REST access control (also check SSG app)|".sStd,
-    "CVE-2026-76266|Linux package upgrade privesc|".s266,
-    "CVE-2026-76267|O11y Cloud app log injection|".sNo94,
-    "CVE-2026-76268|Patroni REST API unauth RCE (9.8)|".s268,
-    "CVE-2026-76269|Search job retrieval IDOR|".sStd,
-    "CVE-2026-76270|SPL2 module catalog SQLi|".s270,
-    "CVE-2026-76271|Discover O11y app ReDoS|".sNo94,
-    "CVE-2026-76272|Secure Gateway signing authz (also check SSG app)|".sStd,
-    "CVE-2026-76273|collect command system messages|".sStd,
-    "CVE-2026-76274|O11y Cloud app SSRF|".sNo94,
-    "CVE-2026-76275|Search job listing authz|".sStd,
-    "CVE-2026-76276|Discover O11y app source maps|".sNo94,
-    "CVE-2026-76277|Username trailing period|".sStd,
-    "CVE-2026-76278|SPL2 module permissions bypass|".sNo94,
-    "CVE-2026-76279|collect command index names|".sStd,
-    "CVE-2026-76280|Secure Gateway KV Store perms (also check SSG app)|".sStd)
-| mvexpand results
-| eval r=split(results,"|"), cve=mvindex(r,0), issue=mvindex(r,1), status=mvindex(r,2)
-| table splunk_server version os_name cve issue status
-| sort splunk_server cve
-```
+#!/usr/bin/env python3
+"""
+CVE-2026-44277 - FortiAuthenticator Unauthenticated RCE
+Author : Ashraf Zaryouh / @0xBlackash
+Github : https://www.github.com/0xBlackash/CVE-2026-44277
+"""
 
-To see only problems, add `| search status="VULNERABLE" OR status="Check manually"` at the end. For a grid with one row per node and one column per CVE, replace the last two lines with `| xyseries splunk_server cve status`.
+import requests
+import sys
+import time
+from colorama import init, Fore, Style
 
-On 9.4.15, you should see `Patched` for the 9.4-affected CVEs and `Not affected` for 76267, 76268, 76270, 76271, 76274, 76276 and 76278. Windows nodes show `Not affected (non-Linux)` for 76266.
+init(autoreset=True)
 
-**Search 2: Secure Gateway app (CVE-2026-76265, 76272, 76280)**
+def banner():
+    print(f"""{Fore.RED}
+╔══════════════════════════════════════════════════════════════╗
+║              CVE-2026-44277 - FortiAuthenticator            ║
+║               Unauthenticated Remote Code Execution          ║
+╚══════════════════════════════════════════════════════════════╝{Style.RESET_ALL}""")
 
-These three are also fixed in the Secure Gateway app, so check the app version as well as the Splunk version.
+def check_target(target):
+    print(f"{Fore.CYAN}[*] Targeting: {target}{Style.RESET_ALL}\n")
+    
+    paths = [
+        "/api/v1/aaa",
+        "/api/v1/fortiauth",
+        "/api/v1/config",
+        "/api/v1/backup",
+        "/api/v1/import"
+    ]
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (CVE-2026-44277 PoC)",
+        "Accept": "application/json"
+    }
 
-```spl
-| rest /services/apps/local splunk_server=*
-| search title="splunk_secure_gateway"
-| eval v=split(version,"."), maj=tonumber(mvindex(v,0)), min=tonumber(mvindex(v,1)), pat=tonumber(mvindex(v,2))
-| eval ssg_status=case(
-    in(tostring(disabled),"1","true"),        "Disabled (mitigated)",
-    maj=3 AND min=10 AND pat>=11,             "Patched",
-    maj=3 AND min=9  AND pat>=25,             "Patched",
-    maj=3 AND min=8  AND pat>=72,             "Patched",
-    maj>3 OR (maj=3 AND min>10),              "Patched",
-    true(),                                   "VULNERABLE")
-| table splunk_server title version disabled ssg_status
-```
+    for path in paths:
+        try:
+            url = target.rstrip("/") + path
+            print(f"[*] Testing → {path}", end=" ")
+            
+            r = requests.get(url, headers=headers, timeout=8, verify=False, allow_redirects=True)
+            
+            if r.status_code in [200, 403, 500] and len(r.text) > 50:
+                print(f"{Fore.GREEN}→ Reachable{Style.RESET_ALL}")
+                print(f"{Fore.RED}[!!] Potential vulnerable endpoint found!{Style.RESET_ALL}")
+                print(f"    Status: {r.status_code} | Length: {len(r.text)}")
+            else:
+                print(f"{Fore.YELLOW}→ {r.status_code}{Style.RESET_ALL}")
+                
+        except Exception as e:
+            print(f"{Fore.RED}→ Error{Style.RESET_ALL}")
 
-**Search 3: limits.conf setting (CVE-2026-76264)**
+    print(f"\n{Fore.YELLOW}[!] Note: This is a detection PoC.{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW}    Full RCE requires specific payload not included for safety.{Style.RESET_ALL}")
 
-This one needs a configuration change after upgrading.
+if __name__ == "__main__":
+    banner()
+    
+    if len(sys.argv) < 2:
+        print("Usage: python3 CVE-2026-44277.py <http://target>")
+        print("Example: python3 CVE-2026-44277.py http://192.168.1.50")
+        sys.exit(1)
 
-```spl
-| rest /servicesNS/nobody/system/configs/conf-limits/lookup splunk_server=*
-| eval cve_76264_config=if(scripted_lookup_raw_write_enforcement="block","Set correctly","MISSING - set to block")
-| table splunk_server scripted_lookup_raw_write_enforcement cve_76264_config
-```
-
-If a node returns no row or an empty value, confirm on that host with `splunk btool limits list lookup --debug`.
-
-**A few caveats:**
-
-- **SVD-2026-1002** (the internal hardening advisory) is fixed by the same versions. If Search 1 shows `Patched` for the standard group, those are covered too.
-- **CVE-2026-76266** only matters if you install or upgrade with RPM/DEB packages. Tarball installs aren't exposed through that path.
-- **Nodes the search head can't reach** won't appear in any of these results. Check standalone forwarders and similar hosts directly with `splunk version`.
+    target = sys.argv[1]
+    check_target(target)
+    
+    print(f"\n{Fore.RED}[!] Update FortiAuthenticator to 6.5.7 / 6.6.9 / 8.0.3 or newer immediately.{Style.RESET_ALL}")
