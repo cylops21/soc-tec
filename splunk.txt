@@ -1,0 +1,18 @@
+| rest /services/server/info splunk_server=*
+| eval v=split(version,"."),
+       maj=tonumber(mvindex(v,0)),
+       min=tonumber(mvindex(v,1)),
+       pat=tonumber(coalesce(mvindex(v,2),"0"))
+| eval status=case(
+    maj=9  AND min=4 AND pat>=15, "Patched",
+    maj=9  AND min=4,             "VULNERABLE",
+    maj=10 AND min=0 AND pat>=10, "Patched",
+    maj=10 AND min=0,             "VULNERABLE",
+    maj=10 AND min=2 AND pat>=7,  "Patched",
+    maj=10 AND min=2,             "VULNERABLE",
+    maj=10 AND min=4 AND pat>=3,  "Patched",
+    maj=10 AND min=4,             "VULNERABLE",
+    true(),                       "Check manually")
+| eval "CVE-2026-76269"=status, "CVE-2026-76275"=status
+| table splunk_server server_roles version "CVE-2026-76269" "CVE-2026-76275"
+| sort "CVE-2026-76269" desc
