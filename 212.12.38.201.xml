@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///C:/Program Files (x86)/Nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.98 scan initiated Tue Oct 20 15:17:53 2026 as: nmap -Pn -p- -sV -v -T4 -oX C:\\Users\\KamaleshP\\Documents\\Projects\\socgen\\germany\\212.12.38.201.xml 212.12.38.201 -->
+<nmaprun scanner="nmap" args="nmap -Pn -p- -sV -v -T4 -oX C:\\Users\\KamaleshP\\Documents\\Projects\\socgen\\germany\\212.12.38.201.xml 212.12.38.201" start="1792489673" startstr="Tue Oct 20 15:17:53 2026" version="7.98" xmloutputversion="1.05">
+<scaninfo type="syn" protocol="tcp" numservices="65535" services="1-65535"/>
+<verbose level="1"/>
+<debugging level="0"/>
+<taskbegin task="Parallel DNS resolution of 1 host." time="1792489673"/>
+<taskend task="Parallel DNS resolution of 1 host." time="1792489674"/>
+<taskbegin task="SYN Stealth Scan" time="1792489674"/>
+<taskprogress task="SYN Stealth Scan" time="1792489705" percent="8.25" remaining="345" etc="1792490050"/>
+<taskprogress task="SYN Stealth Scan" time="1792489735" percent="20.15" remaining="242" etc="1792489977"/>
+<taskprogress task="SYN Stealth Scan" time="1792489765" percent="32.14" remaining="193" etc="1792489957"/>
+<taskprogress task="SYN Stealth Scan" time="1792489795" percent="45.84" remaining="143" etc="1792489938"/>
+<taskprogress task="SYN Stealth Scan" time="1792489825" percent="60.40" remaining="100" etc="1792489924"/>
+<taskprogress task="SYN Stealth Scan" time="1792489855" percent="72.95" remaining="68" etc="1792489922"/>
+<taskprogress task="SYN Stealth Scan" time="1792489885" percent="87.00" remaining="32" etc="1792489917"/>
+<taskend task="SYN Stealth Scan" time="1792489911" extrainfo="65535 total ports"/>
+<taskbegin task="Service scan" time="1792489911"/>
+<taskprogress task="Service scan" time="1792490003" percent="0.00"/>
+<taskprogress task="Service scan" time="1792490005" percent="0.00"/>
+<taskprogress task="Service scan" time="1792490064" percent="33.33" remaining="306" etc="1792490370"/>
+<taskend task="Service scan" time="1792490072" extrainfo="3 services on 1 host"/>
+<taskbegin task="NSE" time="1792490072"/>
+<taskend task="NSE" time="1792490076"/>
+<taskbegin task="NSE" time="1792490076"/>
+<taskend task="NSE" time="1792490077"/>
+<host starttime="1792489674" endtime="1792490077"><status state="up" reason="user-set" reason_ttl="0"/>
+<address addr="212.12.38.201" addrtype="ipv4"/>
+<hostnames>
+</hostnames>
+<ports><extraports state="filtered" count="65531">
+<extrareasons reason="no-response" count="65531" proto="tcp" ports="1-112,114-442,444-1999,2001-5059,5061-65535"/>
+</extraports>
+<port protocol="tcp" portid="113"><state state="closed" reason="reset" reason_ttl="64"/><service name="ident" method="table" conf="3"/></port>
+<port protocol="tcp" portid="443"><state state="open" reason="syn-ack" reason_ttl="43"/><service name="https" tunnel="ssl" method="table" conf="3"/></port>
+<port protocol="tcp" portid="2000"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="cisco-sccp" method="table" conf="3"/></port>
+<port protocol="tcp" portid="5060"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="sip" method="table" conf="3"/></port>
+</ports>
+<times srtt="32475" rttvar="16769" to="100000"/>
+</host>
+<runstats><finished time="1792490077" timestr="Tue Oct 20 15:24:37 2026" summary="Nmap done at Tue Oct 20 15:24:37 2026; 1 IP address (1 host up) scanned in 404.24 seconds" elapsed="404.24" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>
